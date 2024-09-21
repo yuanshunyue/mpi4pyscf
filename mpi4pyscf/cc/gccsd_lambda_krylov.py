@@ -19,6 +19,7 @@
 import gc
 
 import numpy as np
+import scipy
 from scipy import optimize as opt
 from scipy.sparse import linalg as spla
 from pyscf import lib
@@ -161,13 +162,26 @@ def kernel(mycc):
     if mycc.method == 'krylov':
         inner_m = mycc.inner_m
         outer_k = mycc.outer_k
+        scipy_v = [int(sv) for sv in scipy.__version__.split(".")]
+        if (scipy_v[0] < 1) or ((scipy_v[0] == 1) and (scipy_v[1] < 14)):
+            # scipy version earlier than 1.14.0. Use inner_tol.
+            jac_options = {'rdiff': 1e-6, 'inner_maxiter': 100,
+                           'inner_inner_m': inner_m,
+                           'inner_tol': tolnormt * 0.5,
+                           'outer_k': outer_k, 'inner_M': M
+                           }
+        else:
+            # inner_tol is deprecated from 1.14.0 onwards.
+            jac_options = {'rdiff': 1e-6, 'inner_maxiter': 100,
+                           'inner_inner_m': inner_m,
+                           'inner_rtol': tolnormt * 0.5,
+                           'outer_k': outer_k, 'inner_M': M
+                           }
         res = froot(f_res, x0, method='krylov',
                     options={'fatol': tolnormt, 'tol_norm': safe_max_abs, 
                              'disp': True, 'maxiter': max_cycle // inner_m,
                              'line_search': 'wolfe',
-                             'jac_options': {'rdiff': 1e-6, 'inner_maxiter': 100, 
-                                             'inner_inner_m': inner_m, 'inner_tol': tolnormt * 0.5,
-                                             'outer_k': outer_k, 'inner_M': M}
+                             'jac_options': jac_options
                             })
     else:
         raise ValueError
